@@ -1,73 +1,28 @@
-# WP-Agents Memory System
+# WP-Agents
 
-A Python-based memory management system with semantic filtering using sentence transformers.
+An intelligent agent framework with multi-tiered memory management and semantic understanding capabilities.
 
-## Structure
+## Overview
+
+WP-Agents is a sophisticated Python-based system designed to manage conversational memory, extract structured information from interactions, and provide contextual understanding through semantic analysis. The system combines short-term message handling with long-term memory archiving and summarization.
+
+## Key Components
+
+- **Memory Management**: Multi-layered memory system with short-term caches and long-term archives
+- **Summarization**: Automatic extraction of bookings, reservations, requests, tasks, and facts from conversations
+- **User Context**: Per-user state management and message tracking
+- **Message Processing**: Semantic analysis and matching of conversation elements
+
+## Project Structure
 
 ```
-memory/
-    __init__.py
-    filter.py          # Memory filters (DateFilter, CrossEncoderFilter)
-    memories.py        # MemoryManager for orchestrating memory operations
-    memory_repository.py  # Abstract repository interface
-    memory.py          # Core Memory class
-    summarizer.py      # Abstract summarizer interface
-
-user/
-    __init__.py
-    user.py           # User class
+src/
+├── memory/          # Core memory management system
+├── user/            # User state and context management
+└── utils/           # Utilities for data handling and tokens
 ```
 
-## Setup
+## TODO 
 
-The project uses a Python virtual environment with the following packages:
-- `sentence-transformers`: For semantic similarity using cross-encoders
-- `torch`: PyTorch backend for transformers
-- `transformers`: Hugging Face transformers library
-
-To activate the virtual environment:
-```bash
-# Windows
-.venv\Scripts\activate
-
-# Linux/Mac
-source .venv/bin/activate
-```
-
-## Usage
-
-### CrossEncoderFilter with Sentence Transformers
-
-The `CrossEncoderFilter` uses sentence transformers' cross-encoder models for semantic filtering:
-
-```python
-from memory import CrossEncoderFilter, Memory
-from datetime import datetime
-
-# Initialize the filter
-filter = CrossEncoderFilter(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-
-# Create some memories
-memories = [
-    Memory("The user prefers Python over TypeScript", datetime.now()),
-    Memory("The weather is sunny today", datetime.now()),
-    Memory("Machine learning is fascinating", datetime.now()),
-]
-
-# Filter memories by relevance to a query
-query = "What programming language does the user like?"
-relevant_memories = await filter.filter(iter(memories), query)
-```
-
-### Available Cross-Encoder Models
-
-- `cross-encoder/ms-marco-MiniLM-L-6-v2` (default): Fast and effective for semantic search
-- `cross-encoder/nli-deberta-v3-base`: Natural Language Inference based
-- `cross-encoder/ms-marco-TinyBERT-L-2-v2`: Faster, smaller model
-
-## Features
-
-- **Semantic Memory Filtering**: Uses cross-encoder models to find semantically relevant memories
-- **Date-based Filtering**: Filter memories by timestamp
-- **Extensible Architecture**: Abstract interfaces for filters, repositories, and summarizers
-- **Async Support**: Async/await pattern for I/O operations
+- [ ] MCP compatibility: Add the ability for agents to execute tasks
+- [ ] Context management: Supply agents with contextual information to do their tasks 
