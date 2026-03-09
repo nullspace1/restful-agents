@@ -30,6 +30,7 @@ def get(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any] 
     for member in resource.data.group.members:
         member_info.append({
                 "name": member.name,
+                "uuid": member.uuid,
                 "description": member.description
             })
 
@@ -99,7 +100,7 @@ def group_messaging(group: 'Group') -> Resource[MessagingData]:
         get_op=Operation[MessagingData](
             operation=get,
             param_templates=[],
-            description="Get all views from each group member"
+            description="View all agents in the group and their descriptions"
         ),
         post_op=Operation[MessagingData](
             operation=post,

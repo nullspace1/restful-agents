@@ -24,7 +24,6 @@ class Agent:
         self.description = description
         self.groups = groups or []
         self.provider : AgentProvider | None = None
-        self.context_resources: Resource[list[str]]
         self.message_history: Resource[list[Message]]
         
         self.data = folder(
@@ -59,16 +58,6 @@ class Agent:
             group_permissions=PermissionLevel(get=False, post=False, patch=False, delete=False),
             other_permissions=PermissionLevel(get=False, post=False, patch=False, delete=False),
         )
-        self.context_resources = list_resource(
-            agent=self,
-            group=None,
-            resource_name="context_resources",
-            description="Resource paths whose metadata is exposed when receiving a message",
-            user_permissions=PermissionLevel(get=True, post=True, patch=True, delete=True),
-            group_permissions=PermissionLevel(get=False, post=False, patch=False, delete=False),
-            other_permissions=PermissionLevel(get=False, post=False, patch=False, delete=False),
-            initial_data=[],
-        )
         self.message_history = list_resource(
             agent=self,
             group=None,
@@ -82,7 +71,6 @@ class Agent:
         self.response  = agent_response(self) 
 
         self.mount("", groups_folder)
-        self.mount("", self.context_resources)
         self.mount("", self.message_history)
         self.mount("", self.response)
         
