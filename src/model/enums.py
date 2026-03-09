@@ -9,7 +9,3 @@ class OperationType(Enum):
     DELETE = "delete"
     GET = "get"
 
-
-class Status(Enum):
-    SUCCESS = "success"
-    FAILURE = "failure"

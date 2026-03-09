@@ -13,7 +13,7 @@ from src.resources.list import list_resource
 
 if TYPE_CHECKING:
     from src.model.resource import Resource
-
+    
 
 class Agent:
     

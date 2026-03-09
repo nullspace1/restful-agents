@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, Generic, TYPE_CHECKING
+from typing import Any, Generic, TYPE_CHECKING, cast
 
-from src.model.enums import OperationType, Status
+from src.model.enums import OperationType
 from src.model.group import ADMIN, Group
 from src.model.operation import Operation
 from src.model.permission_level import PermissionLevel
 from src.model.events import Event, EventEmitter
 from src.model.types import D
 from src.model.resource_types import ResourceViewDict
-from src.model.operation_result import OperationResult
+from src.model.operation_result import OperationResult, OperationStatus
 
 if TYPE_CHECKING:
     from src.model.agent import Agent
@@ -81,13 +81,19 @@ class Resource(Generic[D], EventEmitter[D]):
             result = self.__get_op__.execute(self, agent, params or {})
             self.__last_operation_at__["get"] = datetime.datetime.now()
             self.__last_error__ = None
-            self.emit(Event(self, self.__get_op__, OperationType.GET, Status.SUCCESS, result, params or {}, agent))
+            self.emit(Event(self, self.__get_op__, OperationType.GET, result["status"], result["output"], params or {}, agent))
             return result
         except Exception as e:
             self.__last_operation_at__["get"] = datetime.datetime.now()
             self.__last_error__ = str(e)
-            self.emit(Event(self, self.__get_op__, OperationType.GET, Status.FAILURE, None, params or {}, agent, e))
-            raise
+            error_output: dict[str, dict[str, str]] = {
+                "exception": {
+                    "type": type(e).__name__,
+                    "message": str(e),
+                }
+            }
+            self.emit(Event(self, self.__get_op__, OperationType.GET, OperationStatus.FAIL, error_output, params or {}, agent, e))
+            return {"status": OperationStatus.FAIL, "output": cast(Any,error_output)}
             
     def post(self, agent : Agent, params : dict[str, Any]) -> OperationResult:
         """Add new content to the resource.
@@ -114,13 +120,19 @@ class Resource(Generic[D], EventEmitter[D]):
             result = self.__post_op__.execute(self, agent, params)
             self.__last_operation_at__["post"] = datetime.datetime.now()
             self.__last_error__ = None
-            self.emit(Event(self, self.__post_op__, OperationType.POST, Status.SUCCESS, result, params, agent))
+            self.emit(Event(self, self.__post_op__, OperationType.POST, result["status"], result["output"], params, agent))
             return result
         except Exception as e:
             self.__last_operation_at__["post"] = datetime.datetime.now()
             self.__last_error__ = str(e)
-            self.emit(Event(self, self.__post_op__, OperationType.POST, Status.FAILURE, None, params, agent, e))
-            raise
+            error_output: dict[str, dict[str, str]] = {
+                "exception": {
+                    "type": type(e).__name__,
+                    "message": str(e),
+                }
+            }
+            self.emit(Event(self, self.__post_op__, OperationType.POST, OperationStatus.FAIL, error_output, params, agent, e))
+            return {"status": OperationStatus.FAIL, "output": cast(Any, error_output)}
             
     def patch(self, agent : Agent, params : dict[str, Any]) -> OperationResult:
         """Modify existing content in the resource.
@@ -147,13 +159,19 @@ class Resource(Generic[D], EventEmitter[D]):
             result = self.__patch_op__.execute(self, agent, params)
             self.__last_operation_at__["patch"] = datetime.datetime.now()
             self.__last_error__ = None
-            self.emit(Event(self, self.__patch_op__, OperationType.PATCH, Status.SUCCESS, result, params, agent))
+            self.emit(Event(self, self.__patch_op__, OperationType.PATCH, result["status"], result["output"], params, agent))
             return result
         except Exception as e:
             self.__last_operation_at__["patch"] = datetime.datetime.now()
             self.__last_error__ = str(e)
-            self.emit(Event(self, self.__patch_op__, OperationType.PATCH, Status.FAILURE, None, params, agent, e))
-            raise
+            error_output: dict[str, dict[str, str]] = {
+                "exception": {
+                    "type": type(e).__name__,
+                    "message": str(e),
+                }
+            }
+            self.emit(Event(self, self.__patch_op__, OperationType.PATCH, OperationStatus.FAIL, error_output, params, agent, e))
+            return {"status": OperationStatus.FAIL, "output": cast(Any, error_output)}
             
     def delete(self, agent : Agent, params : dict[str, Any] | None = None) -> OperationResult:
         """Remove content from the resource.
@@ -180,13 +198,19 @@ class Resource(Generic[D], EventEmitter[D]):
             result = self.__delete_op__.execute(self, agent, params or {})
             self.__last_operation_at__["delete"] = datetime.datetime.now()
             self.__last_error__ = None
-            self.emit(Event(self, self.__delete_op__, OperationType.DELETE, Status.SUCCESS, result, params or {}, agent))
+            self.emit(Event(self, self.__delete_op__, OperationType.DELETE, result["status"], result["output"], params or {}, agent))
             return result
         except Exception as e:
             self.__last_operation_at__["delete"] = datetime.datetime.now()
             self.__last_error__ = str(e)
-            self.emit(Event(self, self.__delete_op__, OperationType.DELETE, Status.FAILURE, None, params or {}, agent, e))
-            raise
+            error_output: dict[str, dict[str, str]] = {
+                "exception": {
+                    "type": type(e).__name__,
+                    "message": str(e),
+                }
+            }
+            self.emit(Event(self, self.__delete_op__, OperationType.DELETE, OperationStatus.FAIL, error_output, params or {}, agent, e))
+            return {"status": OperationStatus.FAIL, "output": cast(Any, error_output)}
         
     def view(self, agent : Agent) -> ResourceViewDict:
         """View basic metadata about the resource.

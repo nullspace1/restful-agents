@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 
 from src.model.resource import Resource
 from src.model.permission_level import PermissionLevel
@@ -24,9 +24,9 @@ class MessagingData:
 def get(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any] | None = None) -> OperationResult:
     """Get all views from each group member"""
     if not resource.data or not resource.data.group:
-        return {"status": OperationStatus.CONTINUE, "output": {"members": []}}
+        return {"status": OperationStatus.CONTINUE, "output": cast(Any, {"agents": []})}
     
-    member_info: list[dict[str, Any]] = []
+    member_info: list[dict[str, str]] = []
     for member in resource.data.group.members:
         member_info.append({
                 "name": member.name,
@@ -34,7 +34,7 @@ def get(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any] 
                 "description": member.description
             })
 
-    return {"status": OperationStatus.CONTINUE, "output": {"agents": member_info}}
+    return {"status": OperationStatus.CONTINUE, "output": cast(Any, {"agents": member_info})}
 
 
 def post(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any]) -> OperationResult: 
@@ -82,7 +82,7 @@ def post(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any]
     if not is_async:
         result["response"] = response
     
-    return {"status": OperationStatus.CONTINUE, "output": result}
+    return {"status": OperationStatus.CONTINUE, "output": cast(Any, result)}
 
 
 def group_messaging(group: 'Group') -> Resource[MessagingData]:

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TypedDict
+from typing import TypedDict, Union
 
 
 class OperationStatus(Enum):
     CONTINUE = 1
     STOP = 2
+    FAIL = 3
     
 
-type op_result = dict[str, list[op_result] | str | op_result]
+
+type primitive = Union[str, int, float, bool]
+type op_result = Union[primitive, dict[str, op_result], list[op_result]]
 
 
 class OperationResult(TypedDict):

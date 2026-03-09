@@ -3,8 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import datetime
 from typing import Any, Generic, TYPE_CHECKING
-from src.model.enums import  OperationType, Status
+from src.model.enums import OperationType
 from src.model.operation import Operation
+from src.model.operation_result import OperationStatus
 from src.model.types import D
 
 if TYPE_CHECKING:
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 class Event(Generic[D]):
     
-    def __init__(self, resource : Resource[D], operation : Operation[D], operation_type : OperationType, status : Status, output : Any, parameters : dict[str, Any], agent : 'Agent', exception : Exception | None = None, timestamp : datetime.datetime | None = None):
+    def __init__(self, resource : Resource[D], operation : Operation[D], operation_type : OperationType, status : OperationStatus, output : Any, parameters : dict[str, Any], agent : 'Agent', exception : Exception | None = None, timestamp : datetime.datetime | None = None):
         self.resource = resource
         self.operation = operation
         self.operation_type = operation_type
