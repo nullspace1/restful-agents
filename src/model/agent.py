@@ -38,7 +38,7 @@ class Agent:
         for group in self.groups:
             group.add_member(self)
             
-        self.__setup()
+        self.__setup__()
             
     def message(self, message : str) -> str:
         ## TODO - implement message sending to provider and receiving response
@@ -50,7 +50,7 @@ class Agent:
             "resource": resource
         })
     
-    def __setup(self):
+    def __setup__(self):
         groups_folder = folder(
             agent=self,
             group=None,

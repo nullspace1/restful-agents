@@ -13,7 +13,8 @@ from src.model.resource_types import ResourceViewDict
 
 if TYPE_CHECKING:
     from src.model.agent import Agent
-
+    
+type op_result = dict[str, list[op_result] | str | op_result ]
 
 class Resource(Generic[D], EventEmitter[D]):
     
@@ -56,7 +57,7 @@ class Resource(Generic[D], EventEmitter[D]):
         self.__last_error__ : str | None = None
         self.data : D  = data
     
-    def get(self, agent : Agent, params : dict[str, Any] | None = None) -> dict[str, str]:
+    def get(self, agent : Agent, params : dict[str, Any] | None = None) -> op_result:
         """Retrieve the full resource contents.
         
         Fetches the complete contents of the resource (e.g., file contents, collection tree).
@@ -89,7 +90,7 @@ class Resource(Generic[D], EventEmitter[D]):
             self.emit(Event(self, self.__get_op__, OperationType.GET, Status.FAILURE, None, params or {}, agent, e))
             raise
             
-    def post(self, agent : Agent, params : dict[str, Any]) -> dict[str, str]:
+    def post(self, agent : Agent, params : dict[str, Any]) -> op_result:
         """Add new content to the resource.
         
         Appends or adds new content to the resource (e.g., appending to a file or adding 
@@ -122,7 +123,7 @@ class Resource(Generic[D], EventEmitter[D]):
             self.emit(Event(self, self.__post_op__, OperationType.POST, Status.FAILURE, None, params, agent, e))
             raise
             
-    def patch(self, agent : Agent, params : dict[str, Any]) -> dict[str, str]:
+    def patch(self, agent : Agent, params : dict[str, Any]) -> op_result:
         """Modify existing content in the resource.
         
         Updates or modifies existing content in the resource (e.g., updating file contents 
@@ -155,7 +156,7 @@ class Resource(Generic[D], EventEmitter[D]):
             self.emit(Event(self, self.__patch_op__, OperationType.PATCH, Status.FAILURE, None, params, agent, e))
             raise
             
-    def delete(self, agent : Agent, params : dict[str, Any] | None = None) -> dict[str, str]:
+    def delete(self, agent : Agent, params : dict[str, Any] | None = None) -> op_result:
         """Remove content from the resource.
         
         Deletes or removes content from the resource (e.g., deleting a file or removing 

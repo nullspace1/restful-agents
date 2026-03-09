@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING, cast
 
-from src.model.resource import Resource
+from src.model.resource import Resource, op_result
 from src.model.permission_level import PermissionLevel
 from src.model.group import Group
 from src.model.operation import Operation
@@ -18,7 +18,7 @@ def sanitize_path(path: str) -> list[str]:
     parts = [p.strip() for p in parts if p.strip()]
     return parts
 
-def get(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> dict[str, str]:
+def get(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> op_result:
     path_str = params.get("path", "")
     path = sanitize_path(path_str) if path_str else []
     
@@ -51,7 +51,7 @@ def get(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[s
     else:
         return target_resource.get(agent, {})
     
-def delete(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> dict[str, str]:
+def delete(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> op_result:
     path_str = params.get("path", "")
     path = sanitize_path(path_str) if path_str else []
     
@@ -83,7 +83,7 @@ def delete(resource : Resource[list[Resource[Any]]], agent : Agent, params : dic
         resource_view = resource.view(agent)
         return {"status": f"Resource '{target_name}' deleted from folder '{resource_view['name']}'"}
 
-def post(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> dict[str, str]:
+def post(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> op_result:
     new_resource : Resource[Any] | None = cast(Resource[Any] | None, params.get("resource"))
     path_str = params.get("path", "")
     path = sanitize_path(path_str) if path_str else []

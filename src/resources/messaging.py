@@ -3,11 +3,10 @@ from __future__ import annotations
 import datetime
 from typing import Any, TYPE_CHECKING
 
-from src.model.resource import Resource
+from src.model.resource import Resource, op_result
 from src.model.permission_level import PermissionLevel
 from src.model.operation import Operation
 from src.model.parameter import ParameterTemplate
-from src.model.resource_types import ResourceViewDict
 
 if TYPE_CHECKING:
     from src.model.agent import Agent
@@ -21,28 +20,22 @@ class MessagingData:
         self.messages: list[dict[str, Any]] = []
 
 
-def get(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any] | None = None) -> dict[str, str]:
+def get(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any] | None = None) -> op_result:
     """Get all views from each group member"""
     if not resource.data or not resource.data.group:
-        return {"members": "[]"}
+        return {"members": []}
     
-    # Collect views from all group members
-    member_views: list[ResourceViewDict] = []
+    member_info: list[op_result] = []
     for member in resource.data.group.members:
-        try:
-            # Get the data folder view for each member
-            view = member.data.view(agent)
-            member_views.append(view)
-        except PermissionError:
-            # Skip members we don't have permission to view
-            continue
-    
-    # Return the views as a formatted string
-    views_str = ",\n".join([str(view) for view in member_views])
-    return {"members": f"[{views_str}]"}
+        member_info.append({
+                "name": member.name,
+                "description": member.description
+            })
+
+    return {"agents": member_info}
 
 
-def post(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any]) -> dict[str, str]: 
+def post(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any]) -> op_result: 
     """Post a message to a specific agent in the group"""
     uuid = params.get("uuid", "")
     message = params.get("message", "")

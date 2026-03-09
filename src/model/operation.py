@@ -1,25 +1,25 @@
 from __future__ import annotations
 
-from typing import Callable, Generic, TYPE_CHECKING
+from typing import Callable, Generic, TYPE_CHECKING, Any
 
 from src.model.parameter import ParameterTemplate
 from src.model.types import D
 
 if TYPE_CHECKING:
-    from src.model.resource import Resource
+    from src.model.resource import Resource, op_result
     from src.model.agent import Agent
 
 
 class Operation(Generic[D]):
     
-    def __init__(self, operation : Callable[['Resource[D]','Agent', dict[str, str]], dict[str,str]],
+    def __init__(self, operation : Callable[['Resource[D]','Agent', dict[str, Any]], 'op_result'],
                  param_templates : list[ParameterTemplate],
                  description : str = ""):
         self.operation = operation
         self.param_templates = param_templates
         self.description = description
         
-    def execute(self, resource : 'Resource[D]', agent : 'Agent', params : dict[str, str]) -> dict[str, str]:
+    def execute(self, resource : 'Resource[D]', agent : 'Agent', params : dict[str, Any]) -> 'op_result':
         for template in self.param_templates:
             if template.required and template.name not in params:
                 raise ValueError(f"Required parameter {template.name} is missing.")

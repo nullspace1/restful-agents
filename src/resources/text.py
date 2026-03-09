@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.model.resource import Resource
+from src.model.resource import Resource, op_result
 from src.model.permission_level import PermissionLevel
 from src.model.operation import Operation
 from src.model.parameter import ParameterTemplate
@@ -10,17 +10,17 @@ from src.model.agent import Agent
 from src.model.group import Group
 
 
-def get(resource : Resource[str], agent : Agent, params : dict[str, Any] | None = None) -> dict[str, str]:
+def get(resource : Resource[str], agent : Agent, params : dict[str, Any] | None = None) -> op_result:
     return {
     "content": resource.data or ""}
 
-def patch(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> dict[str, str]:
+def patch(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> op_result:
     if not resource.data:
         resource.data = ""
     resource.data = params.get("content", "")
     return {"content": resource.data or ""}
 
-def delete(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> dict[str, str]:
+def delete(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> op_result:
     resource.data = ""
     return {"status": "content deleted"}
 
