@@ -6,7 +6,7 @@ from model.resource import Resource
 from model.permission_level import PermissionLevel
 from model.operation import Operation
 from model.parameter import ParameterTemplate
-from model.operation_result import OperationResult, OperationStatus
+from model.operation_result import AgentViewableValue, OperationResult, OperationStatus
 
 if TYPE_CHECKING:
     from model.agent import Agent
@@ -18,9 +18,9 @@ def post(resource: Resource[None], agent: 'Agent', params: dict[str, Any]) -> Op
     
     return {
         "status": OperationStatus.STOP,
-        "output": {
+        "output": AgentViewableValue({
             "response": message,
-        }
+        })
     }
 
 

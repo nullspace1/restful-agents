@@ -5,7 +5,7 @@ from typing import Any, TYPE_CHECKING
 from model.permission_level import PermissionLevel
 from model.operation import Operation
 from model.parameter import ParameterTemplate
-from model.operation_result import OperationResult, OperationStatus
+from model.operation_result import AgentViewableValue, OperationResult, OperationStatus
 from model.resource import Resource
 
 
@@ -15,17 +15,17 @@ if TYPE_CHECKING:
     
     
 def get(resource : Resource[str], agent : Agent, params : dict[str, Any] | None = None) -> OperationResult:
-    return {"status": OperationStatus.CONTINUE, "output": {"content": resource.data or ""}}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"content": resource.data or ""})}
 
 def patch(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> OperationResult:
     if not resource.data:
         resource.data = ""
     resource.data = params.get("content", "")
-    return {"status": OperationStatus.CONTINUE, "output": {"content": resource.data or ""}}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"content": resource.data or ""})}
 
 def delete(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> OperationResult:
     resource.data = ""
-    return {"status": OperationStatus.CONTINUE, "output": {"status": "content deleted"}}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": "content deleted"})}
 
 
 def text(

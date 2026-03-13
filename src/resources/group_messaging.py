@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, TYPE_CHECKING, cast
+from typing import Any, TYPE_CHECKING
 
 from model.permission_level import PermissionLevel
 from model.operation import Operation
 from model.parameter import ParameterTemplate
-from model.operation_result import OperationResult, OperationStatus
+from model.operation_result import AgentViewableValue, OperationResult, OperationStatus
 from model.resource import Resource
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ class MessagingData:
 def get(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any] | None = None) -> OperationResult:
     """Get all views from each group member"""
     if not resource.data or not resource.data.group:
-        return {"status": OperationStatus.CONTINUE, "output": cast(Any, {"agents": []})}
+        return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"agents": []})}
     
     member_info: list[dict[str, str]] = []
     for member in resource.data.group.members:
@@ -33,7 +33,7 @@ def get(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any] 
                 "description": member.description
             })
 
-    return {"status": OperationStatus.CONTINUE, "output": cast(Any, {"agents": member_info})}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"agents": member_info})}
 
 
 def post(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any]) -> OperationResult: 
@@ -79,7 +79,7 @@ def post(resource: Resource[MessagingData], agent: Agent, params: dict[str, Any]
     if not is_async:
         result["response"] = response
     
-    return {"status": OperationStatus.CONTINUE, "output": cast(Any, result)}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue(result)}
 
 
 def group_messaging(group: 'Group') -> Resource[MessagingData]:

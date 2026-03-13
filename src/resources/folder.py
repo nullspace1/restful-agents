@@ -8,7 +8,8 @@ from model.group import Group
 from model.operation import Operation
 from model.parameter import ParameterTemplate
 from model.enums import OperationType
-from model.operation_result import OperationResult, OperationStatus
+from model.operation_result import AgentViewableValue, OperationResult, OperationStatus
+from model.resource_types import ResourceViewDict
 
 if TYPE_CHECKING:
     from model.agent import Agent
@@ -19,6 +20,9 @@ def sanitize_path(path: str) -> list[str]:
     parts = [p.strip() for p in parts if p.strip()]
     return parts
 
+def view_resource(resource: Resource[Any], agent: Agent) -> ResourceViewDict:
+    return cast(ResourceViewDict, resource.view(agent))
+
 def get(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> OperationResult:
     path_str = params.get("path", "")
     path = sanitize_path(path_str) if path_str else []
@@ -27,24 +31,24 @@ def get(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[s
         if resource.data:
             visible_resources = [r for r in resource.data if r.verify(agent, OperationType.GET)]
             contents = ",\n".join([str(r.view(agent)) for r in visible_resources])
-            return {"status": OperationStatus.CONTINUE, "output": {"contents": contents}}
-        return {"status": OperationStatus.CONTINUE, "output": {"contents": "empty"}}
+            return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"contents": contents})}
+        return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"contents": "empty"})}
     
     target_name = path[0]
     
     target_resource = None
     if resource.data:
         for r in resource.data:
-            if r.view(agent)["name"] == target_name:
+            if view_resource(r, agent).get("name") == target_name:
                 target_resource = r
                 break
     
     if not target_resource:
-        resource_view = resource.view(agent)
+        resource_view = view_resource(resource, agent)
         raise ValueError(f"Resource '{target_name}' not found in folder '{resource_view['name']}'")
     
     if len(path) > 1:
-        target_view = target_resource.view(agent)
+        target_view = view_resource(target_resource, agent)
         if target_view["type"] != "folder":
             raise ValueError(f"Resource '{target_name}' is not a folder, cannot navigate further")
         remaining_path = "/".join(path[1:])
@@ -58,31 +62,31 @@ def delete(resource : Resource[list[Resource[Any]]], agent : Agent, params : dic
     
     if not path:
         resource.data = []
-        return {"status": OperationStatus.CONTINUE, "output": {"status": "folder cleared"}}
+        return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": "folder cleared"})}
     
     target_name = path[0]
     
     target_resource = None
     if resource.data:
         for r in resource.data:
-            if r.view(agent)["name"] == target_name:
+            if view_resource(r, agent).get("name") == target_name:
                 target_resource = r
                 break
     
     if not target_resource:
-        resource_view = resource.view(agent)
+        resource_view = view_resource(resource, agent)
         raise ValueError(f"Resource '{target_name}' not found in folder '{resource_view['name']}'")
     
     if len(path) > 1:
-        target_view = target_resource.view(agent)
+        target_view = view_resource(target_resource, agent)
         if target_view["type"] != "folder":
             raise ValueError(f"Resource '{target_name}' is not a folder, cannot navigate further")
         remaining_path = "/".join(path[1:])
         return target_resource.delete(agent, {"path": remaining_path})
     else:
         resource.data.remove(target_resource)
-        resource_view = resource.view(agent)
-        return {"status": OperationStatus.CONTINUE, "output": {"status": f"Resource '{target_name}' deleted from folder '{resource_view['name']}'"}}
+        resource_view = view_resource(resource, agent)
+        return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": f"Resource '{target_name}' deleted from folder '{resource_view['name']}'"})}
 
 def post(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[str, Any]) -> OperationResult:
     new_resource : Resource[Any] | None = cast(Resource[Any] | None, params.get("resource"))
@@ -97,12 +101,12 @@ def post(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[
 
     if not path and new_resource:
         resource.data.append(new_resource)
-        new_view = new_resource.view(agent)
-        resource_view = resource.view(agent)
-        return {"status": OperationStatus.CONTINUE, "output": {"status": f"Resource '{new_view['name']}' added to folder '{resource_view['name']}'"}}
+        new_view = view_resource(new_resource, agent)
+        resource_view = view_resource(resource, agent)
+        return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": f"Resource '{new_view['name']}' added to folder '{resource_view['name']}'"})}
 
     if new_resource:
-        new_view = new_resource.view(agent)
+        new_view = view_resource(new_resource, agent)
         folder_path = path[:-1] if path and path[-1] == new_view["name"] else path
     else:
         folder_path = path[:-1]
@@ -114,14 +118,14 @@ def post(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[
 
         next_resource = None
         for child in current_folder.data:
-            child_view = child.view(agent)
+            child_view = view_resource(child, agent)
             if child_view["name"] == segment:
                 next_resource = child
                 break
 
         if not next_resource:
             agent_group = agent.groups[0] if agent.groups else None
-            resource_view = resource.view(agent)
+            resource_view = view_resource(resource, agent)
             user_permissions = resource_view["permissions"]["user"]
             group_permissions = resource_view["permissions"]["group"]
             other_permissions = resource_view["permissions"]["other"]
@@ -151,7 +155,7 @@ def post(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[
             )
             current_folder.data.append(next_resource)
 
-        next_view = next_resource.view(agent)
+        next_view = view_resource(next_resource, agent)
         if next_view["type"] != "folder":
             raise ValueError(f"Resource '{segment}' is not a folder, cannot navigate further")
 
@@ -174,9 +178,9 @@ def post(resource : Resource[list[Resource[Any]]], agent : Agent, params : dict[
         )
 
     current_folder.data.append(new_resource)
-    new_view = new_resource.view(agent)
-    current_view = current_folder.view(agent)
-    return {"status": OperationStatus.CONTINUE, "output": {"status": f"Resource '{new_view['name']}' added to folder '{current_view['name']}'"}}
+    new_view = view_resource(new_resource, agent)
+    current_view = view_resource(current_folder, agent)
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": f"Resource '{new_view['name']}' added to folder '{current_view['name']}'"})}
 
 
 def folder(

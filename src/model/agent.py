@@ -51,7 +51,7 @@ class Agent:
             'post agent_response {{"message": "Hello, how can I help you?"}}'
         )
         
-        self.data = folder(
+        self.root = folder(
             agent=self,
             group=None,
             folder_name=f"{self.name}_data",
@@ -77,13 +77,13 @@ class Agent:
 
     
     def mount(self, path: str, resource: Resource[Any]):
-        self.data.post(self, {
+        self.root.post(self, {
             "path": path,
             "resource": resource
         })
         
     def unmount(self, path: str, resource: Resource[Any]):
-        self.data.delete(self, {
+        self.root.delete(self, {
             "path": path,
             "resource": resource
         })
@@ -161,7 +161,10 @@ class Agent:
             other_permissions=PermissionLevel(get=False, post=False, patch=False, delete=False),
             text=reasoning,
         )
-        self.data.post(self, {"path": "thoughts", "resource": thought})
+        self.root.post(self, {"path": "thoughts", "resource": thought})
+
+    def __format_output__(self, output: Any, indent: int = 2) -> str:
+        return json.dumps(output, indent=indent, default=str)
 
     def __run_operation_chain__(self, prompt: str) -> str:
         conversation = self.__build_prompt__(prompt)
@@ -179,20 +182,15 @@ class Agent:
             result = self.__execute__(response.resource, response.operation, response.parameters)
 
             if result["status"] == OperationStatus.STOP:
-                output = result["output"]
-                if isinstance(output, dict):
-                    output_dict = cast(dict[str, Any], output)
-                    response_message = output_dict.get("response")
-                    if isinstance(response_message, str):
-                        return response_message
-                return json.dumps(output, default=str)
+                output_view = result["output"].view(self)
+                return self.__format_output__(output_view)
 
             if result["status"] == OperationStatus.FAIL:
-                raise RuntimeError(json.dumps(result["output"], default=str))
+                raise RuntimeError(self.__format_output__(result["output"].view(self)))
 
             conversation += (
                 f"\n[Agent]: {raw_response}"
-                f"\n[Operation result]: {json.dumps(result['output'], default=str)}"
+                f"\n[Operation result]: {self.__format_output__(result['output'].view(self))}"
             )
 
     def __build_prompt__(self, prompt: str) -> str:
@@ -214,14 +212,12 @@ class Agent:
         )
 
     def __view_root__(self):
-        return json.dumps([d.view(agent=self) for d in self.data.data], indent=2, default=str)
+        return self.__format_output__([resource.view(self) for resource in self.root.data]) if self.root.data else "empty"
     
     def __execute__(self, resource_path: str, operation_type : OperationType, parameters: dict[str, Any]) -> OperationResult:
         
-        print(f"Executing operation: {operation_type} on resource path: {resource_path} with parameters: {parameters}")
+        resource : Resource[Any] = cast(Resource[Any], self.root.get(self, {"path": resource_path})["output"])
         
-        resource : Resource[Any] = self.data.get(self, {"path": resource_path})["output"]
-             
         if operation_type == OperationType.GET:
             return resource.get(self, parameters)
         elif operation_type == OperationType.POST:

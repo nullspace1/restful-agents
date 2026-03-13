@@ -19,6 +19,6 @@ class Group:
     def add_member(self, agent : 'Agent'):
         if agent not in self.members:
             self.members.append(agent)
-            agent.data.post(agent, {"path": f"groups/{self.name}-{self.uuid}/messaging", "resource": self.messaging_resource})
+            agent.root.post(agent, {"path": f"groups/{self.name}-{self.uuid}/messaging", "resource": self.messaging_resource})
             
 ADMIN = Group(uuid="admin", name="Admin", description="The admin group for the system. Has access to all resources")

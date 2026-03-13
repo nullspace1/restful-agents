@@ -7,7 +7,7 @@ from model.permission_level import PermissionLevel
 from model.operation import Operation
 from model.parameter import ParameterTemplate
 from model.group import Group
-from model.operation_result import OperationResult, OperationStatus
+from model.operation_result import AgentViewableValue, OperationResult, OperationStatus
 
 if TYPE_CHECKING:
     from model.agent import Agent
@@ -23,7 +23,7 @@ def get(resource: Resource[list[T]], agent: Agent, params: dict[str, Any] | None
         
         str_list = [f'{index} - {item}' for index, item in enumerate(resource.data)]
         
-        return {"status": OperationStatus.CONTINUE, "output": {"items": "\n".join(str_list)}}
+        return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"items": "\n".join(str_list)})}
 
     if not isinstance(index, int):
         raise ValueError("Parameter index must be of type int.")
@@ -31,13 +31,13 @@ def get(resource: Resource[list[T]], agent: Agent, params: dict[str, Any] | None
     if index < 0 or index >= len(resource.data):
         raise IndexError("Index out of range.")
 
-    return {"status": OperationStatus.CONTINUE, "output": {"item": cast(Any, resource.data[index])}}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"item": cast(Any, resource.data[index])})}
 
 
 def post(resource: Resource[list[T]], agent: Agent, params: dict[str, Any]) -> OperationResult:
     value = cast(T, params.get("value"))
     resource.data.append(value)
-    return {"status": OperationStatus.CONTINUE, "output": {"status": "item appended"}}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": "item appended"})}
 
 
 def patch(resource: Resource[list[T]], agent: Agent, params: dict[str, Any]) -> OperationResult:
@@ -51,7 +51,7 @@ def patch(resource: Resource[list[T]], agent: Agent, params: dict[str, Any]) -> 
         raise IndexError("Index out of range.")
 
     resource.data.insert(index, value)
-    return {"status": OperationStatus.CONTINUE, "output": {"status": "item inserted"}}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": "item inserted"})}
 
 
 def delete(resource: Resource[list[T]], agent: Agent, params: dict[str, Any] | None = None) -> OperationResult:
@@ -64,7 +64,7 @@ def delete(resource: Resource[list[T]], agent: Agent, params: dict[str, Any] | N
         raise IndexError("Index out of range.")
 
     resource.data.pop(index)
-    return {"status": OperationStatus.CONTINUE, "output": {"status": "item deleted"}}
+    return {"status": OperationStatus.CONTINUE, "output": AgentViewableValue({"status": "item deleted"})}
 
 
 def list_resource(

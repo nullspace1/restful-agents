@@ -4,7 +4,8 @@ from typing import TypedDict
 
 
 class ResourceViewDict(TypedDict):
-    """Resource metadata returned by view method."""
+    """Resource metadata returned by Resource.view()."""
+
     name: str
     type: str
     author: str
