@@ -227,18 +227,18 @@ class Resource(Generic[D], EventEmitter[D]):
         Raises:
             PermissionError: If the user does not have VIEW permission on this resource.
         """
-        if not self.__verify_permissions__(agent, OperationType.GET):
+        if not self.__has_any_permissions__(agent):
             raise PermissionError("You do not have permission to view this resource.")
         return {
                 "name": self.__name__,
                 "type": self.__type__,
                 "author": self.__owner__.name if self.__owner__ else "None",
                 "group": self.__group__.name if self.__group__ else "None",
-                "created_at": self.__created_at__.isoformat(),
+                "created_at": self.__relative_time_ago__(self.__created_at__),
                 "description": self.__description__,
                 "operations": self.__options__(),
                 "operation_timestamps": {
-                    key: value.isoformat() if value else None
+                    key: self.__relative_time_ago__(value) if value else None
                     for key, value in self.__last_operation_at__.items()
                 },
                 "last_error": self.__last_error__,
@@ -270,6 +270,39 @@ class Resource(Generic[D], EventEmitter[D]):
             return self.__group_permissions__.verify(operation)
         else:
             return self.__other_permissions__.verify(operation)
+
+    def __has_any_permissions__(self, agent: Agent) -> bool:
+        return any(
+            self.__verify_permissions__(agent, operation)
+            for operation in (
+                OperationType.GET,
+                OperationType.POST,
+                OperationType.PATCH,
+                OperationType.DELETE,
+            )
+        )
+
+    def __relative_time_ago__(self, timestamp: datetime.datetime) -> str:
+        now = datetime.datetime.now()
+        delta = now - timestamp
+        total_seconds = max(0, int(delta.total_seconds()))
+
+        units: list[tuple[str, int]] = [
+            ("year", 60 * 60 * 24 * 365),
+            ("month", 60 * 60 * 24 * 30),
+            ("day", 60 * 60 * 24),
+            ("hour", 60 * 60),
+            ("minute", 60),
+            ("second", 1),
+        ]
+
+        for unit_name, unit_seconds in units:
+            value = total_seconds // unit_seconds
+            if value > 0:
+                suffix = "" if value == 1 else "s"
+                return f"{value} {unit_name}{suffix} ago"
+
+        return "0 seconds ago"
     
     def __options__(self) -> dict[str, str]:
         """
