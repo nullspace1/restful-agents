@@ -28,18 +28,19 @@ def delete(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> 
 def text(
     agent : Agent,
     group : Group | None, 
+    resource_name : str,
     user_permissions : PermissionLevel, 
     group_permissions : PermissionLevel, 
     other_permissions : PermissionLevel,
-    text_summary : str,
+    description : str,
     text : str
     ) -> Resource[str]:
     return Resource[str](
         owner=agent,
         group=group,
         type="text",
-        name="text",
-        description=text_summary,
+        name=resource_name,
+        description=description,
         user_permissions=user_permissions,
         group_permissions=group_permissions,
         other_permissions=other_permissions,

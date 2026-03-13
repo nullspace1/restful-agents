@@ -29,7 +29,7 @@ def post(resource: Resource['Agent'], agent: 'Agent', params: dict[str, Any]) ->
     }
 
 
-def agent_response(
+def send_agent_reply(
     owner: 'Agent',
 ) -> Resource['Agent']:
     return Resource['Agent'](

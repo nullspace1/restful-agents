@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TypedDict, Union
+from typing import Any, TypedDict, Union
 
 
 class OperationStatus(Enum):
@@ -17,4 +17,4 @@ type op_result = Union[primitive, dict[str, op_result], list[op_result]]
 
 class OperationResult(TypedDict):
     status: OperationStatus
-    output: op_result | None
+    output: Any

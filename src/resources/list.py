@@ -20,7 +20,10 @@ def get(resource: Resource[list[T]], agent: Agent, params: dict[str, Any] | None
     index = (params or {}).get("index")
 
     if index is None:
-        return {"status": OperationStatus.CONTINUE, "output": {"items": cast(Any, resource.data)}}
+        
+        str_list = [f'{index} - {item}' for index, item in enumerate(resource.data)]
+        
+        return {"status": OperationStatus.CONTINUE, "output": {"items": "\n".join(str_list)}}
 
     if not isinstance(index, int):
         raise ValueError("Parameter index must be of type int.")
