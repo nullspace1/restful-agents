@@ -11,7 +11,6 @@ from model.auth import AuthenticationKey, KeySet
 from model.enums import OperationType
 from model.api import API
 from model.group import ADMIN
-from model.message import Message
 from model.operation_result import JsonLike, OperationResult, OperationStatus
 from model.response import Response
 from resources.agent_reply import send_agent_reply
@@ -40,7 +39,6 @@ class Agent:
         self.__groups__ : list[Group] = groups or []
         self.__provider__ : AgentProvider = provider
         self.__information__ : Resource[str]
-        self.__message_history__: Resource[list[Message]]
         self.__initial_context__ : str = initial_context
         self.__current_conversation__ = ""
         self.__token_limit__ = token_limit
@@ -55,6 +53,7 @@ class Agent:
         self.__local_api__ : API = API(f'agent-{self.__name__}-{self.__uuid__}', f"Local API for agent {self.__name__}", [])
         self.__auth_keys__ : dict[Resource[Any], KeySet] = {}
         self.__apis__ = set([self.__local_api__])
+        self.__conversation__ : str = ""
 
         for group in self.__groups__:
             try:
@@ -64,16 +63,19 @@ class Agent:
             
         self.__setup__(mounted_resources)
 
-    def message(self, message: str, agent : Agent | None = None) -> str:
-        self.__message_history__.data.append(Message(user="user", content=message))
+    def message(self, message: str) -> str:
+
+        if (len(self.__current_conversation__) == 0):
+            self.__current_conversation__ = self.__build_prompt__()
+        elif (self.__provider__.count_tokens(self.__current_conversation__) > self.__token_limit__):
+            self.__summarize_conversation__()
+           
         self.__current_conversation__ += f"\n[User]: {message}"
 
-        if (self.__provider__.count_tokens(self.__current_conversation__) > self.__token_limit__):
-            self.__summarize_conversation__()
-
         response = self.__run_operation_chain__(self.__current_conversation__)
-        self.__message_history__.data.append(Message(user=self.__name__, content=response))
-        self.__current_conversation__ += f"\n[{self.__name__}]: {response}"
+        
+        self.__current_conversation__ += f"\n[{self.get_full_name()}]: {response}"
+        
         return response
 
     def add_api(self, api: API):
@@ -104,9 +106,8 @@ class Agent:
         
     def __summarize_conversation__(self):
         summary_prompt = f"Summarize the following conversation between the user and the agent in a concise manner, keeping all important details and information. The summary should be as short as possible while still retaining the key points of the conversation. Conversation: {self.__current_conversation__}"
-
         summary_response = self.__run_operation_chain__(summary_prompt)
-        self.__current_conversation__ = f"Summary of previous conversation: {summary_response}"
+        self.__current_conversation__ = self.__build_prompt__() + f"\n\nSummary of previous conversation: {summary_response}"
 
     def __save_thought__(self, reasoning: str) -> None:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -117,23 +118,20 @@ class Agent:
             content=reasoning
         ))
         
-    def __format_output__(self, output: Any, indent: int = 2) -> str:
-        return json.dumps(output, indent=indent, default=str)
-
     def __run_operation_chain__(self, prompt: str) -> str:
-        conversation = self.__build_prompt__(prompt)
 
         while True:
-            raw_response = self.__provider__.send_message(conversation)
-            match = self._COMMAND_RE.search(raw_response)
-            if not match:
-                raise ValueError(f"Invalid response format (no valid command found at end): {raw_response}")
-            reasoning = raw_response[:match.start()].strip()
+            raw_response = self.__provider__.send_message(prompt)
+            parsed_response: Response
+            parsed_response, reasoning = self.__parse_response__(raw_response)
             if reasoning:
                 self.__save_thought__(reasoning)
-            response = self.__parse_response__(raw_response)
             
-            result : OperationResult = self.__execute__(response.resource, response.operation, response.parameters)
+            result : OperationResult = self.__execute__(
+                parsed_response.resource,
+                parsed_response.operation,
+                parsed_response.parameters,
+            )
 
             if result["status"] == OperationStatus.STOP:
                 output_view = result["output"].view(self)
@@ -142,28 +140,30 @@ class Agent:
             if result["status"] == OperationStatus.FAIL:
                 raise RuntimeError(self.__format_output__(result["output"].view(self)))
 
-            conversation += (
+            self.__conversation__ += (
                 f"\n[Agent]: {raw_response}"
                 f"\n[Operation result]: {self.__format_output__(result['output'].view(self))}"
             )
 
-    def __build_prompt__(self, prompt: str) -> str:
-        return self.__initial_context__ + "\n\n" + "You are agent " + self.__name__ + "." + self.__tool_usage_instructions__ + "\n\n" + "Agent's data:\n" + str(self.__view_root__()) + "\n\n" + prompt
+    def __build_prompt__(self) -> str:
+        return self.__initial_context__ + "\n\n" + "You are agent " + self.get_full_name() + "." + self.__tool_usage_instructions__ + "\n\n" + "Agent's data:\n" + str(self.__view_root__()) + "\n\n"
                  
     _COMMAND_RE = re.compile(
         r'(get|post|patch|delete)\s+(\S+)\s+(\{.*\})\s*$',
         re.IGNORECASE | re.DOTALL,
     )
 
-    def __parse_response__(self, response: str) -> Response:
+    def __parse_response__(self, response: str) -> tuple[Response, str]:
         match = self._COMMAND_RE.search(response)
         if not match:
             raise ValueError(f"Invalid response format (no valid command found at end): {response}")
-        return Response(
+        reasoning = response[:match.start()].strip()
+        parsed_response = Response(
             resource=match.group(2),
             operation=OperationType(match.group(1).lower()),
             parameters=json.loads(match.group(3))
         )
+        return parsed_response, reasoning
 
     def __view_root__(self) -> JsonLike:
         available_apis = sorted(api.name for api in self.__apis__ if api != self.__local_api__) 
@@ -197,4 +197,8 @@ class Agent:
             return resource.delete(self, parameters)
 
         raise ValueError(f"Unsupported operation type: {operation_type}")
+    
+    def __format_output__(self, output: Any, indent: int = 2) -> str:
+        return json.dumps(output, indent=indent, default=str)
+
         
