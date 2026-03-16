@@ -87,6 +87,9 @@ class Agent:
         key_set, resource = resource_key_pair
         self.__auth_keys__[resource] = key_set
         self.__local_api__.mount(self, resource)
+        
+    def add_keys_for_resource(self, resource: Resource[Any], key_set: KeySet):
+        self.__auth_keys__[resource] = key_set
 
     def is_admin(self) -> bool:
         return any(group == ADMIN for group in self.__groups__)
@@ -186,6 +189,9 @@ class Agent:
             raise ValueError(f"API not found: {api_name}")
         
         resource = api.get(self, resource_path)
+        
+        if not resource:
+            raise ValueError(f"Resource not found: {resource_path} in API {api_name}")
         
         if operation_type == OperationType.GET:
             return resource.get(self, parameters)

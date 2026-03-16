@@ -24,7 +24,7 @@ class ResourceViewDict(TypedDict):
     last_error: str | None
 
 
-JsonPrimitive: TypeAlias = str | int | float | bool | None
+JsonPrimitive: TypeAlias = str | int | float | bool
 JsonLike: TypeAlias = (
     JsonPrimitive
     | list['JsonLike']
