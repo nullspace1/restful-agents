@@ -8,7 +8,7 @@ from model.enums import OperationType
 from model.operation import Operation
 from model.events import Event, EventEmitter
 from model.types import D
-from model.operation_result import AgentViewable, AgentViewableValue, JsonDict, OperationResult, OperationStatus 
+from model.operation_result import AgentViewable, AgentViewableValue, OperationResult, OperationStatus, ResourceViewDict 
 
 if TYPE_CHECKING:
     from model.agent import Agent
@@ -77,10 +77,10 @@ class Resource(Generic[D], EventEmitter[D], AgentViewable):
         except Exception as error:
             return self.__handle_operation_exception__(OperationType.DELETE, operation, params or {}, agent, error)
         
-    def view(self, agent : Agent) -> JsonDict | None:
+    def view(self, agent : Agent) -> ResourceViewDict | None:
         if not self.__has_any_key__(agent):
-            return {}
-        value : JsonDict = {
+            return None
+        value : ResourceViewDict = {
                 "name": self.__name__,
                 "created_at": self.__relative_time_ago__(self.__created_at__),
                 "description": self.__description__,

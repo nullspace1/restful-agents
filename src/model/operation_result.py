@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import TYPE_CHECKING,  TypeAlias, TypedDict, TypeGuard
+from typing import TYPE_CHECKING, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
     from model.agent import Agent
@@ -12,6 +12,15 @@ class OperationStatus(Enum):
     CONTINUE = 1
     STOP = 2
     FAIL = 3
+
+
+class ResourceViewDict(TypedDict):
+    name: str
+    created_at: str
+    description: str
+    operations: dict[str, str]
+    operation_timestamps: dict[str, str]
+    last_error: str
 
 
 JsonPrimitive: TypeAlias = str | int | float | bool
@@ -27,45 +36,29 @@ Json: TypeAlias = (
     | dict[str, JsonPrimitive]
     | dict[str, list[JsonPrimitive]]
     | dict[str, str | int]
+    | ResourceViewDict
 )
 
-JsonDict = dict[str, Json]
+JsonDict: TypeAlias = dict[str, Json]
 
 class NamedJsonDict(TypedDict):
     name: str
 
 
-def has_name(value: JsonDict | None) -> TypeGuard[NamedJsonDict]:
-    return value is not None and isinstance(value.get("name"), str)
-
-
-def get_name(value: JsonDict | None) -> str | None:
-    if has_name(value):
-        return value["name"]
-    return None
-
 class AgentViewable(ABC):
     
     @abstractmethod
-    def view(self, agent : Agent) -> JsonDict | None:
-        pass
-    
-    @abstractmethod
-    def get_property(self,agent : Agent, key : str) -> Json | None:
+    def view(self, agent : Agent) -> Json | None:
         pass
 
 class AgentViewableValue(AgentViewable):
 
-    def __init__(self, value: JsonDict) -> None:
+    def __init__(self, value: Json) -> None:
         self.value = value
 
-    def view(self, agent: Agent) -> JsonDict | None:
+    def view(self, agent: Agent) -> Json | None:
         return self.value
     
-    def get_property(self, agent: Agent, key: str) -> Json | None:
-        value = self.view(agent)
-        if value:
-            return value.get(key)
 
 
 class OperationResult(TypedDict):

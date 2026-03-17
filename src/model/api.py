@@ -1,7 +1,7 @@
 from typing import Any
 
 from model.agent import Agent
-from model.operation_result import AgentViewable, Json, JsonDict, get_name
+from model.operation_result import AgentViewable, Json, JsonDict
 from model.resource import Resource
 
 class APINode:
@@ -26,7 +26,7 @@ class API(AgentViewable):
         self.__build_path_graph__(agent)
         for resource in self.resources:
             view  = resource.view(agent) or None
-            if get_name(view) == path:
+            if view and view["name"] == path:
                 return resource
     def search(self, agent : Agent, query : str, depth : int = 0, root_node : APINode | None = None) -> Json:
         self.__build_path_graph__(agent)
@@ -60,7 +60,7 @@ class API(AgentViewable):
         count = 0
         for r in self.resources:
             view = r.view(agent)
-            if get_name(view) == node.name:
+            if view and view["name"] == node.name:
                 count += 1
         return count > 0
 
@@ -69,9 +69,9 @@ class API(AgentViewable):
         root = APINode('', [], False)
         for resource in self.resources:
             view = resource.view(agent)
-            name = get_name(view)
-            if name is None:
+            if not view:
                 continue
+            name = view["name"]
             split_path : list[str] = name.split('/')
             current_node = root
             for part in split_path:
