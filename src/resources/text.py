@@ -27,7 +27,9 @@ def post(resource : Resource[str], agent : Agent, params : dict[str, Any]) -> Op
     resource.data = new_content
     return {
             "status": OperationStatus.CONTINUE,
-            "output": AgentViewableValue(resource.data)
+            "output": AgentViewableValue({
+                "message": "Text resource updated successfully."
+            })
     }
   
 def text(

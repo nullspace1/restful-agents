@@ -4,11 +4,10 @@ from abc import ABC, abstractmethod
 import datetime
 from typing import Generic, TYPE_CHECKING
 from model.enums import OperationType
-from model.types import D
+from model.typebar import D
+from typing import Any
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from model.agent import Agent
     from model.operation import Operation
     from model.operation_result import OperationStatus

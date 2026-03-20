@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar, TypedDict
-
+from typing import TYPE_CHECKING, Any, TypedDict
+from model.auth import KeySet
+from model.resource import Resource
 if TYPE_CHECKING:
     from typing import TypeAlias
-    from model.auth import KeySet
-    from model.resource import Resource
 
-D = TypeVar('D')
 
 class ResourceViewDict(TypedDict):
     name: str

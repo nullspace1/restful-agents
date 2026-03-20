@@ -6,7 +6,7 @@ from typing import Generic, TYPE_CHECKING
 from model.auth import  KeySet
 from model.enums import OperationType
 from model.events import Event, EventEmitter
-from model.types import D
+from model.typebar import D
 from model.operation_result import AgentViewable, AgentViewableValue, OperationStatus
 
 if TYPE_CHECKING:

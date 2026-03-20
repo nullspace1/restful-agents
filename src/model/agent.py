@@ -12,6 +12,7 @@ from model.group import ADMIN
 from model.operation_result import OperationStatus
 from model.response import Response
 from model.types import  ResourceKeyPair
+from model.message import Message
 from resources.agent_reply import send_agent_reply
 from resources.scanner import scanner
 from resources.text import text
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from model.operation_result import Json, OperationResult
     from model.group import Group
     from model.resource import Resource
+    
 
 class Agent:
     
@@ -45,20 +47,19 @@ class Agent:
         self.__groups__ : list[Group] = groups or []
         self.__provider__ : AgentProvider = provider
         self.__initial_context__ : str = initial_context
-        self.__current_conversation__ : str = ""
         self.__token_limit__ : int = token_limit
+        self.__local_api__ : API = API(f'agent-{self.__name__.replace(" ", "-")}-{self.__uuid__}', f"Local API for agent {self.__name__}", [])
         self.__tool_usage_instructions__ : str = (
             tool_usage_instructions or
             'Your last line must be a command in this exact format:\n\n'
             '    <operation_type> <api_name>/<resource_path> <json_encoded_parameters>\n\n'
             'Use one of: get, post, patch, delete. '
             'Parameters must be a JSON object; use {{}} when empty. '
-            'Example: post <api_name>/agent_response {{"message": "Hello, how can I help you?"}}'
+            f'Example: post {self.__local_api__.name}/agent_response {{"message": "Hello, how can I help you?"}}'
         )
-        self.__local_api__ : API = API(f'agent-{self.__name__}-{self.__uuid__}', f"Local API for agent {self.__name__}", [])
         self.__auth_keys__ : dict[Resource[Any], KeySet] = {}
         self.__apis__ : set[API] = set([self.__local_api__])
-        self.__conversation__ : str = ""
+        self.__conversation__ : list[Message] = []
 
         for group in self.__groups__:
             try:
@@ -73,21 +74,21 @@ class Agent:
             "Summarize the following conversation between the user and the agent in a concise manner, keeping all important details and information. The summary should be as short as possible while still retaining the key points of the conversation. Conversation: \n\n {conversation}"
         )
         
-        self.__error_handler__ = error_handler
+        self.__error_handler__ : Callable[[Json, Agent], OperationStatus] | None = error_handler
 
     def message(self, message: str) -> str:
 
-        if (len(self.__current_conversation__) == 0):
-            self.__current_conversation__ = self.__build_prompt__()
+        if (len(self.__conversation__) == 0):
+            self.__conversation__ = [self.__build_prompt__()]
             
-        elif (self.__provider__.count_tokens(self.__current_conversation__) > self.__token_limit__):
+        elif (self.__provider__.count_tokens(self.__conversation__) > self.__token_limit__):
             self.__summarize_conversation__()
            
-        self.__current_conversation__ += f"\n[User]: {message}"
+        self.__conversation__.append(Message(role="user", content=message))
 
-        response = self.__run_operation_chain__(self.__current_conversation__)
+        response : str = self.__run_operation_chain__(self.__conversation__)
         
-        self.__current_conversation__ += f"\n[{self.get_full_name()}]: {response}"
+        self.__conversation__.append(Message(role="agent", content=response))
         
         return response
 
@@ -108,7 +109,7 @@ class Agent:
         return any(group == ADMIN for group in self.__groups__)
     
     def get_auth_key(self, resource : Resource[Any], operation : OperationType) -> AuthenticationKey | None:
-        key_set = self.__auth_keys__.get(resource)
+        key_set : KeySet | None = self.__auth_keys__.get(resource)
         if not key_set:
             return None
         return key_set.get(operation)
@@ -116,16 +117,23 @@ class Agent:
     def get_full_name(self) -> str:
         return f"{self.__name__} ({self.__uuid__})"
     
-    def __setup__(self, mounted_resources: list[ResourceKeyPair] | None = None):
+    def get_entire_conversation(self) -> list[Message]:
+        return self.__conversation__
+    
+    def kill(self) -> None:
+        self.__conversation__ = []
+        raise SystemExit("Agent has been killed.")
+        
+    def __setup__(self, mounted_resources: list[ResourceKeyPair] | None = None) -> None:
         self.mount_locally(send_agent_reply(owner=self))
         self.mount_locally(scanner(self, self.__local_api__))
         self.mount_locally(text(owner=self, name="agent_preloaded_text", description="All text written here will be guaranteed to be available even after summarizing the conversation. Use this to store important information.", content=""))
         for resource_key_pair in (mounted_resources or []):
             self.mount_locally(resource_key_pair)
             
-    def __summarize_conversation__(self):
-        summary_response = self.__run_operation_chain__(self.__summarize_prompt_template__)
-        self.__current_conversation__ = self.__build_prompt__() + f"\n\nSummary of previous conversation: {summary_response}"
+    def __summarize_conversation__(self) -> None:
+        summary_response = self.__run_operation_chain__([Message(role="system", content=self.__tool_usage_instructions__),Message(role="system", content=self.__summarize_prompt_template__)])
+        self.__conversation__ = [self.__build_prompt__(), Message(role="system", content=f"Summary of previous conversation: {summary_response}")]
 
     def __save_thought__(self, reasoning: str) -> None:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -136,11 +144,11 @@ class Agent:
             content=reasoning
         ))
         
-    def __run_operation_chain__(self, prompt: str) -> str:
+    def __run_operation_chain__(self, conversation: list[Message]) -> str:
 
         while True:
             
-            raw_response = self.__provider__.send_message(prompt)
+            raw_response = self.__provider__.send_message(conversation)
             parsed_response: Response
             parsed_response, reasoning = self.__parse_response__(raw_response)
             if reasoning:
@@ -165,18 +173,19 @@ class Agent:
                     if error_status == OperationStatus.STOP:
                         return "Error handler is stopping execution."
                     elif error_status == OperationStatus.CONTINUE:
-                        prompt += f"\nThe previous operation resulted in an error: {self.__format_output__(result['output'].view(self))}\nPlease adjust your response and try again."
+                        conversation += [Message(role="system", content=f"Error occurred during operation execution: {self.__format_output__(error)}. Continue with the next command.")]
                     else:
                         raise ValueError(f"Invalid status returned by error handler: {error_status}")
                 
 
-            self.__conversation__ += (
-                f"\n[Agent]: {raw_response}"
-                f"\n[Operation result]: {self.__format_output__(result['output'].view(self))}"
-            )
+            self.__conversation__ += [
+                Message(role="agent", content=raw_response),
+                Message(role="system", content=self.__format_output__(result['output'].view(self)))
+            ]
 
-    def __build_prompt__(self) -> str:
-        return self.__initial_context__ + "\n\n" + "You are agent " + self.get_full_name() + "." + self.__tool_usage_instructions__ + "\n\n" + "Overview of available resources:\n" + str(self.__view_root__()) + "\n\n"
+    def __build_prompt__(self) -> Message:
+        return  Message(
+            role="system", content=self.__initial_context__ + "\n\n" + "You are agent " + self.get_full_name() + "." + self.__tool_usage_instructions__ + "\n\n" + "Overview of available resources:\n" + str(self.__view_root__()))
                  
     _COMMAND_RE = re.compile(
         r'(get|post|patch|delete)\s+(\S+)\s+(\{.*\})\s*$',

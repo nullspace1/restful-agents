@@ -16,10 +16,10 @@ if TYPE_CHECKING:
     from model.operation_result import Json, OperationResult
     from model.types import ResourceKeyPair
 
-
 def get(resource : Resource[API], agent : Agent, params : dict[str, Any]) -> OperationResult:
     search_query : str  = params.get("search") or ""
-    resources : Json = resource.data.search(agent, search_query)
+    depth : int = params.get("depth") or 0
+    resources : Json = resource.data.search(agent, search_query, depth)
     return {
         "status": OperationStatus.CONTINUE,
         "output": AgentViewableValue(resources)

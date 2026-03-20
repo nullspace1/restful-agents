@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Generic, TYPE_CHECKING
 
-from model.types import D
+from model.typebar import D
 
 if TYPE_CHECKING:
     from typing import Any, Callable
