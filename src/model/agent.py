@@ -8,6 +8,7 @@ import uuid
 
 from model.enums import OperationType
 from model.api import API
+from model.events import AgentMessageEventData, EventEmitter, EventListener, ScheduledOperationEventData, agent_message_event, scheduled_operation_event
 from model.group import ADMIN
 from model.operation_result import OperationStatus
 from model.response import Response
@@ -60,6 +61,8 @@ class Agent:
         self.__auth_keys__ : dict[Resource[Any], KeySet] = {}
         self.__apis__ : set[API] = set([self.__local_api__])
         self.__conversation__ : list[Message] = []
+        self.__message_event_emitter__ : EventEmitter[AgentMessageEventData] = EventEmitter()
+        self.__operation_event_emitter__ : EventEmitter[ScheduledOperationEventData] = EventEmitter()
 
         for group in self.__groups__:
             try:
@@ -84,11 +87,11 @@ class Agent:
         elif (self.__provider__.count_tokens(self.__conversation__) > self.__token_limit__):
             self.__summarize_conversation__()
            
-        self.__conversation__.append(Message(role="user", content=message))
+        self.append_to_conversation(Message(role="user", content=message))
 
         response : str = self.__run_operation_chain__(self.__conversation__)
         
-        self.__conversation__.append(Message(role="agent", content=response))
+        self.append_to_conversation(Message(role="agent", content=response))
         
         return response
 
@@ -123,6 +126,16 @@ class Agent:
     def kill(self) -> None:
         self.__conversation__ = []
         raise SystemExit("Agent has been killed.")
+    
+    def add_scheduled_operation_listener(self, listener: EventListener[ScheduledOperationEventData]):
+        self.__operation_event_emitter__.add_listener(listener)
+        
+    def add_message_listener(self, listener: EventListener[AgentMessageEventData]):
+        self.__message_event_emitter__.add_listener(listener)
+    
+    def append_to_conversation(self, message: Message) -> None:
+        self.__conversation__.append(message)
+        self.__message_event_emitter__.emit(agent_message_event(self, message))
         
     def __setup__(self, mounted_resources: list[ResourceKeyPair] | None = None) -> None:
         self.mount_locally(send_agent_reply(owner=self))
@@ -178,10 +191,8 @@ class Agent:
                         raise ValueError(f"Invalid status returned by error handler: {error_status}")
                 
 
-            self.__conversation__ += [
-                Message(role="agent", content=raw_response),
-                Message(role="system", content=self.__format_output__(result['output'].view(self)))
-            ]
+            self.append_to_conversation(Message(role="agent", content=raw_response))
+            self.append_to_conversation(Message(role="system", content=self.__format_output__(result['output'].view(self))))
 
     def __build_prompt__(self) -> Message:
         return  Message(
@@ -229,14 +240,26 @@ class Agent:
         if not resource:
             raise ValueError(f"Resource not found: {resource_path} in API {api_name}")
         
+        
+        self.__operation_event_emitter__.emit(scheduled_operation_event(
+            resource=resource,
+            resource_name=resource_identifier,
+            operation_type=operation_type,
+            parameters=parameters,
+            agent=self,
+            timestamp=datetime.datetime.now()
+        ))
+        
         if operation_type == OperationType.GET:
-            return resource.get(self, parameters)
+            resource.get(self, parameters)
         elif operation_type == OperationType.POST:
-            return resource.post(self, parameters)
+            resource.post(self, parameters)
         elif operation_type == OperationType.PATCH:
-            return resource.patch(self, parameters)
+            resource.patch(self, parameters)
         elif operation_type == OperationType.DELETE:
-            return resource.delete(self, parameters)
+            resource.delete(self, parameters)
+        
+        
 
         raise ValueError(f"Unsupported operation type: {operation_type}")
     

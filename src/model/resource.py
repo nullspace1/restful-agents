@@ -5,7 +5,7 @@ from typing import Generic, TYPE_CHECKING
 
 from model.auth import  KeySet
 from model.enums import OperationType
-from model.events import Event, EventEmitter
+from model.events import EventEmitter, ExecutedOperationEventData, executed_operation_event
 from model.typebar import D
 from model.operation_result import AgentViewable, AgentViewableValue, OperationStatus
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from model.operation_result import OperationResult
     from model.types import ResourceViewDict
 
-class Resource(Generic[D], EventEmitter[D], AgentViewable):
+class Resource(Generic[D], EventEmitter[ExecutedOperationEventData[D]], AgentViewable):
     
     def __init__(self, 
                  owner : Agent | None, 
@@ -108,7 +108,7 @@ class Resource(Generic[D], EventEmitter[D], AgentViewable):
         self.__last_operation_at__[operation_type.value] = datetime.datetime.now()
         self.__last_error__ = ""
         self.emit(
-            Event(
+            executed_operation_event(
                 self,
                 self.__name__,
                 operation,
@@ -152,7 +152,7 @@ class Resource(Generic[D], EventEmitter[D], AgentViewable):
             }
         )
         self.emit(
-            Event(
+            executed_operation_event(
                 self,
                 self.__name__,
                 operation,

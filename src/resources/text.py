@@ -10,7 +10,6 @@ from model.resource import Resource
 
 if TYPE_CHECKING:
     from typing import Any
-
     from model.agent import Agent
     from model.operation_result import OperationResult
     from model.types import ResourceKeyPair
