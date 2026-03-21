@@ -23,7 +23,7 @@ book_date = skill(
         ParameterTemplate("title", "The title of the booking",  converter=str, required=True),
         ParameterTemplate("date", "The date of the booking in ISO format",  converter=lambda str_date: datetime.datetime.fromisoformat(str_date), required=True),
         ],
-    func=lambda params: {"result": "Book found: " + params["title"]}
+    func=lambda params: {"result": "Booking completed: " + params["title"]}
 )
 
 agent.add_to_local_api(book_date)

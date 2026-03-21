@@ -57,7 +57,7 @@ class HuggingFaceAgentProvider(AgentProvider):
         for m in messages:
             if not m or not m.content:
                 continue
-            total += len(m.content.split())
+            total += len(str(m.content).split())
         return total
     
     def get_role(self, message: Message) -> str:

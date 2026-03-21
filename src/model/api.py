@@ -19,9 +19,11 @@ class API(AgentViewable):
         self.name : str = name
         self.description : str = description
         self.resources : set[Resource[Any]] = set(resources)
+        self.api_updates : list[Resource[Any]] = []
 
     def mount(self, resource: Resource[Any]) -> None:
         self.resources.add(resource)
+        self.api_updates.append(resource)
 
     def get(self, agent : Agent, path : str) -> Resource[Any] | None:
         for resource in self.resources:
@@ -39,6 +41,11 @@ class API(AgentViewable):
                 else:
                     matching_resources.append({"name": view["name"]})
         return matching_resources
+    
+    def get_updates(self) -> list[Resource[Any]]:
+        updates = self.api_updates
+        self.api_updates = []
+        return updates
 
     def view(self, agent : Agent) -> JsonDict | None:
         return {

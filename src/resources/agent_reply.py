@@ -21,6 +21,7 @@ def post(resource: Resource[None], agent: 'Agent', params: dict[str, Any]) -> Op
     return {
         "status": OperationStatus.STOP,
         "output": AgentViewableValue({
+            "message": "Message sent to user.",
             "response": message,
         })
     }

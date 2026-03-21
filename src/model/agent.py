@@ -6,11 +6,14 @@ import re
 from typing import TYPE_CHECKING, Callable
 import uuid
 
+from errors.api import APINotFoundError
+from errors.command_parsing import CommandParsingError
+from errors.resource import ResourceNotFoundError
 from model.enums import OperationType
 from model.api import API
 from model.events import AgentMessageEventData, EventEmitter, EventListener, ScheduledOperationEventData, agent_message_event, scheduled_operation_event
 from model.group import ADMIN
-from model.operation_result import OperationStatus
+from model.operation_result import AgentViewableValue, OperationStatus
 from model.response import Response
 from model.types import  ResourceKeyPair
 from model.message import Message
@@ -63,6 +66,10 @@ class Agent:
         self.__conversation__ : list[Message] = []
         self.__message_event_emitter__ : EventEmitter[AgentMessageEventData] = EventEmitter()
         self.__operation_event_emitter__ : EventEmitter[ScheduledOperationEventData] = EventEmitter()
+        self._COMMAND_RE = re.compile(
+        r'(get|post|patch|delete)\s+(\S+)\s+(\{.*\})\s*$',
+        re.IGNORECASE | re.DOTALL,
+    )
         
         for group in self.__groups__:
             try:
@@ -79,7 +86,7 @@ class Agent:
         
         self.__error_handler__ : Callable[[Agent,Json], OperationStatus] | None = error_handler
 
-    def message(self, message: str) -> str:
+    def message(self, message: str) -> Json:
 
         if (len(self.__conversation__) == 0):
             self.__conversation__ = [self.__build_prompt__()]
@@ -89,11 +96,9 @@ class Agent:
            
         self.__append_to_conversation__(Message(role="user", content=message))
 
-        response : str = self.__run_operation_chain__(self.__conversation__)
+        self.__run_operation_chain__(self.__conversation__)
         
-        self.__append_to_conversation__(Message(role="agent", content=response))
-        
-        return response
+        return self.__conversation__[-1].content if self.__conversation__ else ""
 
     def add_api(self, api: API):
         if api.name in [existing_api.name for existing_api in self.__apis__]:
@@ -119,9 +124,6 @@ class Agent:
     
     def get_full_name(self) -> str:
         return f"{self.__name__} ({self.__uuid__})"
-    
-    def get_entire_conversation(self) -> list[Message]:
-        return self.__conversation__
     
     def kill(self) -> None:
         self.__conversation__ = []
@@ -155,7 +157,7 @@ class Agent:
             content=reasoning
         ))
         
-    def __run_operation_chain__(self, conversation: list[Message]) -> str:
+    def __run_operation_chain__(self, conversation: list[Message]) -> None:
 
         while True:
             
@@ -171,37 +173,39 @@ class Agent:
                     parsed_response.operation,
                     parsed_response.parameters,
                 )
-
-            if result["status"] == OperationStatus.STOP:
+            
+            self.__append_to_conversation__(Message(role="agent", content=raw_response))
+            
+            if result["status"] == OperationStatus.CONTINUE:
+                self.__append_to_conversation__(Message(role="system", content=result["output"].view(self) or {"message": "No response from operation."}))
+                
+            elif result["status"] == OperationStatus.STOP:
                 output_view = result["output"].view(self)
-                return self.__format_output__(output_view)
+                self.__append_to_conversation__(Message(role="system", content=output_view or {"message": "No response from operation."}))
+                return
 
-            if result["status"] == OperationStatus.FAIL:
+            elif result["status"] == OperationStatus.FAIL:
                 if self.__error_handler__:
                     error : Json | None = result["output"].view(self)
                     if not error:
                         error = {"error": "Unknown error occurred."}
                     error_status = self.__error_handler__(self, error)
                     if error_status == OperationStatus.STOP:
-                        return "Error handler is stopping execution."
+                        self.__append_to_conversation__( Message(role="system", content={"message": "Error occurred during operation execution. Returning control to user.", "error": error}))
                     elif error_status == OperationStatus.CONTINUE:
-                        conversation += [Message(role="system", content=f"Error occurred during operation execution: {self.__format_output__(error)}. Continue with the next command.")]
-                    else:
+                        self.__append_to_conversation__( Message(role="system", content={"message": "Error occurred during operation execution. Continue with the next command.", "error": error}))
+                    elif error_status == OperationStatus.FAIL:
+                        self.__append_to_conversation__( Message(role="system", content={"message": "Error occurred during operation execution. Stopping agent execution.", "error": error}))
                         raise ValueError(f"Invalid status returned by error handler: {error_status}")
+                return
+            
+            self.__append_to_conversation__(Message(role="system",
+                                                    content={"message": "API Updates after operation execution:", "updates": self.__get_api_updates__()}))
                 
-
-            self.__append_to_conversation__(Message(role="agent", content=raw_response))
-            self.__append_to_conversation__(Message(role="system", content=self.__format_output__(result['output'].view(self))))
-
     def __build_prompt__(self) -> Message:
         return  Message(
             role="system", content=self.__initial_context__ + "\n\n" + "You are agent " + self.get_full_name() + "." + self.__tool_usage_instructions__ + "\n\n" + "Overview of available resources:\n" + str(self.__view_root__()))
                  
-    _COMMAND_RE = re.compile(
-        r'(get|post|patch|delete)\s+(\S+)\s+(\{.*\})\s*$',
-        re.IGNORECASE | re.DOTALL,
-    )
-
     def __parse_response__(self, response: str) -> tuple[Response, str]:
         match = self._COMMAND_RE.search(response)
         if not match:
@@ -222,23 +226,14 @@ class Agent:
         }
     
     def __execute__(self, resource_identifier: str, operation_type : OperationType, parameters: dict[str, Any]) -> OperationResult:
-        api_name, separator, resource_path = resource_identifier.partition("/")
-
-        if not separator or not resource_path:
-            raise ValueError(
-                "Resource name must include the API name in the format '<api_name>/<resource_path>'."
-            )
-
-        api = next((api for api in self.__apis__ if api.name == api_name), None)
-        
-        if not api:
-            raise ValueError(f"API not found: {api_name}")
-        
-        resource = api.get(self, resource_path)
-        
-        if not resource:
-            raise ValueError(f"Resource not found: {resource_path} in API {api_name}")
-        
+       
+        try:
+            resource : Resource[Any] | None = self.__find_resource__(resource_identifier)
+        except (APINotFoundError, ResourceNotFoundError, CommandParsingError) as e:
+            return {
+                "status": OperationStatus.FAIL,
+                "output": AgentViewableValue({"message": "Error occurred while finding resource","error": str(e)})
+            }
         
         self.__operation_event_emitter__.emit(scheduled_operation_event(
             resource=resource,
@@ -260,7 +255,31 @@ class Agent:
         
         raise ValueError(f"Unsupported operation type: {operation_type}")
     
-    def __format_output__(self, output: Any, indent: int = 2) -> str:
-        return json.dumps(output, indent=indent, default=str)
+    def __find_resource__(self, resource_identifier: str) -> Resource[Any]:
+        api_name, separator, resource_path = resource_identifier.partition("/")
 
+        if not separator or not resource_path:
+            raise CommandParsingError(
+                "Resource name must include the API name in the format '<api_name>/<resource_path>'."
+            )
+
+        api = next((api for api in self.__apis__ if api.name == api_name), None)
         
+        if not api:
+            raise APINotFoundError(f"API not found: {api_name}")
+        
+        resource = api.get(self, resource_path)
+        
+        if not resource:
+            raise ResourceNotFoundError(f"Resource not found: {resource_path} in API {api_name}")
+
+        return resource
+    
+    def __get_api_updates__(self) -> Json:
+        updated_resources : list[Json] = []
+        for api in self.__apis__:
+            for resource in api.get_updates():
+                view : Json | None  = resource.view(self)
+                if view:
+                    updated_resources.append(view)
+        return updated_resources
