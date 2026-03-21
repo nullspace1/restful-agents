@@ -39,7 +39,7 @@ def send_agent_reply(
         post_op=Operation['None'](
             operation=post,
             param_templates=[
-                ParameterTemplate("message", "The message to send to the agent", str, required=True),
+                ParameterTemplate("message", "The message to send to the agent",  converter=str, required=True),
             ],
             description="Send a message to the user and stops the agent's execution."
         )

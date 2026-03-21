@@ -13,12 +13,19 @@ def post(resource : Resource[Callable[[dict[str,str]], Json]], agent : Agent, pa
     try:
         return {
             "status": OperationStatus.CONTINUE,
-            "output": AgentViewableValue(resource.data(params))
+            "output": AgentViewableValue({
+                "message": "Function executed successfully.",
+                "result": resource.data(params)
+            })
         }
     except Exception as e:
         return {
             "status": OperationStatus.FAIL,
-            "output": AgentViewableValue({"error": str(e)})
+            "output": AgentViewableValue({
+                "message": "Function execution failed.",
+                "error": str(e)
+            }
+                                         )
         }
     
     

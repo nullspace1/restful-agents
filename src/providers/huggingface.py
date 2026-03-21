@@ -37,11 +37,13 @@ class HuggingFaceAgentProvider(AgentProvider):
             choice: Any = completion.choices[0]
             # HF SDK may return the message as `choice.message.content` or `choice.text`
             if hasattr(choice, "message") and getattr(choice.message, "content", None) is not None:
-                return str(choice.message.content)
+                response = str(choice.message.content)
             if hasattr(choice, "text"):
-                return str(choice.text)
+                response = str(choice.text)
             # Fallback to stringifying the choice
-            return str(choice)
+            response = str(choice)
+            print(f"Received response from Hugging Face API: {response}")
+            return response
         except Exception:
             # Fallback: stringify full completion
             return str(completion)

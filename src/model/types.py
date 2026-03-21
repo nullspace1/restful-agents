@@ -11,7 +11,7 @@ class ResourceViewDict(TypedDict):
     name: str
     created_at: str
     description: str
-    operations: dict[str, str]
+    operations: dict[str, JsonDict]
     operation_timestamps: dict[str, str]
     last_error: str
 

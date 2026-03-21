@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Generic, TYPE_CHECKING
 
 from model.typebar import D
+from model.types import JsonDict
 
 if TYPE_CHECKING:
     from typing import Any, Callable
@@ -36,3 +37,12 @@ class Operation(Generic[D]):
                 raise ValueError(f"Parameter {param_name} is not valid for this operation.")
 
         return self.operation(resource, agent, params)
+    
+    def view(self) -> JsonDict:
+        return {
+            "description": self.description, "parameters": [{
+            'name': template.name,
+            'description': template.description,
+            'required': template.required
+           
+        } for template in self.param_templates]}

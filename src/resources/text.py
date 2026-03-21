@@ -53,7 +53,7 @@ def text(
         post_op=Operation[str](
             operation=post,
             param_templates=[
-                ParameterTemplate("content", "The new content for the text resource", str, required=True),
+                ParameterTemplate("content", "The new content for the text resource",  converter=str, required=True),
             ],
             description="Update the content of the text resource"
         )

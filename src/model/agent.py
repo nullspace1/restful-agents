@@ -35,9 +35,9 @@ class Agent:
                  description : str, 
                  provider : AgentProvider, 
                  token_limit : int = 3000,
-                 error_handler : Callable[[Json, Agent], OperationStatus] | None = None,
+                 error_handler : Callable[[Agent,Json], OperationStatus] | None = None,
+                 exception_handler : Callable[[Agent,Exception], OperationResult] | None = None,
                  groups : list[Group] | None = None,
-                 mounted_resources : list[ResourceKeyPair] | None = None,
                  initial_context : str = "", 
                  tool_usage_instructions : str | None = None,
                  summarize_prompt: str | None = None):
@@ -57,27 +57,29 @@ class Agent:
             'Use one of: get, post, patch, delete. '
             'Parameters must be a JSON object; use {{}} when empty. '
             f'Example: post {self.__local_api__.name}/agent_response {{"message": "Hello, how can I help you?"}}'
+            'You will be returned control back after executing the command, except for commands that return control to the user (e.g. sending a message to the user), which will stop your execution'
         )
         self.__auth_keys__ : dict[Resource[Any], KeySet] = {}
         self.__apis__ : set[API] = set([self.__local_api__])
         self.__conversation__ : list[Message] = []
         self.__message_event_emitter__ : EventEmitter[AgentMessageEventData] = EventEmitter()
         self.__operation_event_emitter__ : EventEmitter[ScheduledOperationEventData] = EventEmitter()
-
+        
         for group in self.__groups__:
             try:
                 self.add_api(group.api)
             except ValueError:
                 pass
             
-        self.__setup__(mounted_resources)
+        self.__setup__()
 
         self.__summarize_prompt_template__ : str = (
             summarize_prompt or
             "Summarize the following conversation between the user and the agent in a concise manner, keeping all important details and information. The summary should be as short as possible while still retaining the key points of the conversation. Conversation: \n\n {conversation}"
         )
         
-        self.__error_handler__ : Callable[[Json, Agent], OperationStatus] | None = error_handler
+        self.__error_handler__ : Callable[[Agent,Json], OperationStatus] | None = error_handler
+        self.__exception_handler__ : Callable[[Agent,Exception], OperationResult] | None = exception_handler
 
     def message(self, message: str) -> str:
 
@@ -87,11 +89,11 @@ class Agent:
         elif (self.__provider__.count_tokens(self.__conversation__) > self.__token_limit__):
             self.__summarize_conversation__()
            
-        self.append_to_conversation(Message(role="user", content=message))
+        self.__append_to_conversation__(Message(role="user", content=message))
 
         response : str = self.__run_operation_chain__(self.__conversation__)
         
-        self.append_to_conversation(Message(role="agent", content=response))
+        self.__append_to_conversation__(Message(role="agent", content=response))
         
         return response
 
@@ -100,7 +102,7 @@ class Agent:
             raise ValueError(f"API with name '{api.name}' is already mounted.")
         self.__apis__.add(api)
     
-    def mount_locally(self, resource_key_pair: ResourceKeyPair):
+    def add_to_local_api(self, resource_key_pair: ResourceKeyPair):
         key_set, resource = resource_key_pair
         self.__auth_keys__[resource] = key_set
         self.__local_api__.mount(resource)
@@ -133,16 +135,14 @@ class Agent:
     def add_message_listener(self, listener: EventListener[AgentMessageEventData]):
         self.__message_event_emitter__.add_listener(listener)
     
-    def append_to_conversation(self, message: Message) -> None:
+    def __append_to_conversation__(self, message: Message) -> None:
         self.__conversation__.append(message)
         self.__message_event_emitter__.emit(agent_message_event(self, message))
         
-    def __setup__(self, mounted_resources: list[ResourceKeyPair] | None = None) -> None:
-        self.mount_locally(send_agent_reply(owner=self))
-        self.mount_locally(scanner(self, self.__local_api__))
-        self.mount_locally(text(owner=self, name="agent_preloaded_text", description="All text written here will be guaranteed to be available even after summarizing the conversation. Use this to store important information.", content=""))
-        for resource_key_pair in (mounted_resources or []):
-            self.mount_locally(resource_key_pair)
+    def __setup__(self) -> None:
+        self.add_to_local_api(send_agent_reply(owner=self))
+        self.add_to_local_api(scanner(self, self.__local_api__))
+        self.add_to_local_api(text(owner=self, name="agent_preloaded_text", description="All text written here will be guaranteed to be available even after summarizing the conversation. Use this to store important information.", content=""))
             
     def __summarize_conversation__(self) -> None:
         summary_response = self.__run_operation_chain__([Message(role="system", content=self.__tool_usage_instructions__),Message(role="system", content=self.__summarize_prompt_template__)])
@@ -150,7 +150,7 @@ class Agent:
 
     def __save_thought__(self, reasoning: str) -> None:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        self.mount_locally(text(
+        self.add_to_local_api(text(
             owner=self,
             name=f"thoughts/{timestamp}",
             description=f"Thought recorded at {timestamp}",
@@ -164,14 +164,21 @@ class Agent:
             raw_response = self.__provider__.send_message(conversation)
             parsed_response: Response
             parsed_response, reasoning = self.__parse_response__(raw_response)
+            
             if reasoning:
                 self.__save_thought__(reasoning)
             
-            result : OperationResult = self.__execute__(
-                parsed_response.resource,
-                parsed_response.operation,
-                parsed_response.parameters,
-            )
+            try:
+                result : OperationResult = self.__execute__(
+                    parsed_response.resource,
+                    parsed_response.operation,
+                    parsed_response.parameters,
+                )
+            except ValueError as e:
+                if self.__exception_handler__:
+                    result : OperationResult = self.__exception_handler__(self, e)
+                else:
+                    raise e
 
             if result["status"] == OperationStatus.STOP:
                 output_view = result["output"].view(self)
@@ -182,7 +189,7 @@ class Agent:
                     error : Json | None = result["output"].view(self)
                     if not error:
                         error = {"error": "Unknown error occurred."}
-                    error_status = self.__error_handler__(error, self)
+                    error_status = self.__error_handler__(self, error)
                     if error_status == OperationStatus.STOP:
                         return "Error handler is stopping execution."
                     elif error_status == OperationStatus.CONTINUE:
@@ -191,8 +198,8 @@ class Agent:
                         raise ValueError(f"Invalid status returned by error handler: {error_status}")
                 
 
-            self.append_to_conversation(Message(role="agent", content=raw_response))
-            self.append_to_conversation(Message(role="system", content=self.__format_output__(result['output'].view(self))))
+            self.__append_to_conversation__(Message(role="agent", content=raw_response))
+            self.__append_to_conversation__(Message(role="system", content=self.__format_output__(result['output'].view(self))))
 
     def __build_prompt__(self) -> Message:
         return  Message(

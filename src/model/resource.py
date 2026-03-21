@@ -9,9 +9,10 @@ from model.events import EventEmitter, ExecutedOperationEventData, executed_oper
 from model.typebar import D
 from model.operation_result import AgentViewable, AgentViewableValue, OperationStatus
 
+
 if TYPE_CHECKING:
     from typing import Any
-
+    from model.types import JsonDict
     from model.agent import Agent
     from model.group import Group
     from model.operation import Operation
@@ -198,14 +199,14 @@ class Resource(Generic[D], EventEmitter[ExecutedOperationEventData[D]], AgentVie
 
         return "0 seconds ago"
     
-    def __options__(self) -> dict[str, str]:
-        ops : dict[str, str] = {}
+    def __options__(self) -> dict[str, JsonDict]:
+        ops : dict[str, JsonDict] = {}
         if self.__get_op__:
-            ops["get"] = self.__get_op__.description
+            ops["get"] = self.__get_op__.view()
         if self.__post_op__:
-            ops["post"] = self.__post_op__.description
+            ops["post"] = self.__post_op__.view()
         if self.__patch_op__:
-            ops["patch"] = self.__patch_op__.description
+            ops["patch"] = self.__patch_op__.view()
         if self.__delete_op__:
-            ops["delete"] = self.__delete_op__.description
+            ops["delete"] = self.__delete_op__.view()
         return ops        

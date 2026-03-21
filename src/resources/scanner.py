@@ -40,8 +40,8 @@ def scanner(
         get_op=Operation[API](
             operation=get,
             param_templates=[
-                ParameterTemplate("search", "Search query to filter resources by name", str, required=False),
-                ParameterTemplate("depth", "Depth for recursive search (0 for no recursion)", int, required=False),
+                ParameterTemplate("search", "Search query to filter resources by name",  converter=str, required=False),
+                ParameterTemplate("depth", "Depth for recursive search (0 for no recursion)",  converter=int, required=False),
             ],
             description="List all resources in the API that are visible to the agent and filter them by name"
         )
