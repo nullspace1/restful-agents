@@ -36,7 +36,6 @@ class Agent:
                  provider : AgentProvider, 
                  token_limit : int = 3000,
                  error_handler : Callable[[Agent,Json], OperationStatus] | None = None,
-                 exception_handler : Callable[[Agent,Exception], OperationResult] | None = None,
                  groups : list[Group] | None = None,
                  initial_context : str = "", 
                  tool_usage_instructions : str | None = None,
@@ -79,7 +78,6 @@ class Agent:
         )
         
         self.__error_handler__ : Callable[[Agent,Json], OperationStatus] | None = error_handler
-        self.__exception_handler__ : Callable[[Agent,Exception], OperationResult] | None = exception_handler
 
     def message(self, message: str) -> str:
 
@@ -168,17 +166,11 @@ class Agent:
             if reasoning:
                 self.__save_thought__(reasoning)
             
-            try:
-                result : OperationResult = self.__execute__(
+            result : OperationResult = self.__execute__(
                     parsed_response.resource,
                     parsed_response.operation,
                     parsed_response.parameters,
                 )
-            except ValueError as e:
-                if self.__exception_handler__:
-                    result : OperationResult = self.__exception_handler__(self, e)
-                else:
-                    raise e
 
             if result["status"] == OperationStatus.STOP:
                 output_view = result["output"].view(self)
@@ -266,8 +258,6 @@ class Agent:
         elif operation_type == OperationType.DELETE:
             resource.delete(self, parameters)
         
-        
-
         raise ValueError(f"Unsupported operation type: {operation_type}")
     
     def __format_output__(self, output: Any, indent: int = 2) -> str:
