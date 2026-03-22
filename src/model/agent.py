@@ -3,8 +3,11 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import threading
 from typing import TYPE_CHECKING, Callable
 import uuid
+
+from concurrent_collections import ConcurrentBag, ConcurrentDictionary
 
 from errors.api import APINotFoundError
 from errors.command_parsing import CommandParsingError
@@ -36,7 +39,8 @@ class Agent:
     def __init__(self, 
                  name : str, 
                  description : str, 
-                 provider : AgentProvider, 
+                 provider : AgentProvider,
+                 admin_key : AuthenticationKey, 
                  token_limit : int = 3000,
                  error_handler : Callable[[Agent,Json], AgentState] | None = None,
                  groups : list[Group] | None = None,
@@ -51,6 +55,7 @@ class Agent:
         self.__provider__ : AgentProvider = provider
         self.__initial_context__ : str = initial_context
         self.__token_limit__ : int = token_limit
+        self.__admin_key__ : AuthenticationKey  = admin_key
         self.__local_api__ : API = API(f'agent-{self.__name__.replace(" ", "-")}-{self.__uuid__}', f"Local API for agent {self.__name__}", [])
         self.__tool_usage_instructions__ : str = (
             tool_usage_instructions or
@@ -61,9 +66,9 @@ class Agent:
             f'Example: post {self.__local_api__.name}/agent_response {{"message": "Hello, how can I help you?"}}'
             'You will be returned control back after executing the command, except for commands that return control to the user (e.g. sending a message to the user), which will stop your execution'
         )
-        self.__auth_keys__ : dict[Resource[Any], KeySet] = {}
-        self.__apis__ : set[API] = set([self.__local_api__])
-        self.__conversation__ : list[Message] = []
+        self.__auth_keys__ : ConcurrentDictionary[Resource[Any], KeySet] = ConcurrentDictionary[Resource[Any], KeySet]()
+        self.__apis__ : ConcurrentBag[API] = ConcurrentBag([self.__local_api__])
+        self.__conversation__ : ConcurrentBag[Message] = ConcurrentBag()
         self.__message_event_emitter__ : EventEmitter[AgentMessageEventData] = EventEmitter()
         self.__operation_event_emitter__ : EventEmitter[ScheduledOperationEventData] = EventEmitter()
         self._COMMAND_RE = re.compile(
@@ -85,25 +90,42 @@ class Agent:
         )
         
         self.__error_handler__ : Callable[[Agent,Json], AgentState] | None = error_handler
+        self.__message_queue__ : ConcurrentBag[str] = ConcurrentBag()
+        self.__available_message_event__ : threading.Event = threading.Event()
 
-    def message(self, message: str) -> Json:
-
-        if (len(self.__conversation__) == 0):
-            self.__conversation__ = [self.__build_prompt__()]
-            
-        elif (self.__provider__.count_tokens(self.__conversation__) > self.__token_limit__):
-            self.__summarize_conversation__()
-           
-        self.__append_to_conversation__(Message(role="user", content=message))
-
-        self.__run_operation_chain__(self.__conversation__)
+    def message(self, message: str):
+        self.__message_queue__.append(message)
+        if len(self.__message_queue__) == 1:
+            self.__available_message_event__.set()
+                   
+    def start(self) -> None:
         
-        return self.__conversation__[-1].content if self.__conversation__ else ""
+        threading.Thread(target=self.__await__, args=(), daemon=True).start()
+        
+    def __await__(self) -> None:
+        
+        while True:
+            
+            self.__available_message_event__.wait()
+            message = self.__message_queue__.pop()
+            self.__available_message_event__.clear()
+             
+            if (len(self.__conversation__) == 0):
+                self.__conversation__.append(self.__build_prompt__())
+            
+            elif (self.__provider__.count_tokens([x for x in self.__conversation__]) > self.__token_limit__):
+                self.__summarize_conversation__()
+            
+            self.__append_to_conversation__(Message(role="user", content=message))
+
+            self.__run_operation_chain__([x for x in self.__conversation__])
+            
+
 
     def add_api(self, api: API):
         if api.name in [existing_api.name for existing_api in self.__apis__]:
             raise ValueError(f"API with name '{api.name}' is already mounted.")
-        self.__apis__.add(api)
+        self.__apis__.append(api)
     
     def add_to_local_api(self, resource_key_pair: ResourceKeyPair):
         key_set, resource = resource_key_pair
@@ -125,9 +147,10 @@ class Agent:
     def get_full_name(self) -> str:
         return f"{self.__name__} ({self.__uuid__})"
     
-    def kill(self) -> None:
-        self.__conversation__ = []
-        raise SystemExit("Agent has been killed.")
+    def kill(self, admin_key : AuthenticationKey) -> None:
+        if admin_key == self.__admin_key__:
+            self.__conversation__ = ConcurrentBag()
+            raise SystemExit("Agent has been killed.")
     
     def add_scheduled_operation_listener(self, listener: EventListener[ScheduledOperationEventData]):
         self.__operation_event_emitter__.add_listener(listener)
@@ -146,7 +169,8 @@ class Agent:
             
     def __summarize_conversation__(self) -> None:
         summary_response = self.__run_operation_chain__([Message(role="system", content=self.__tool_usage_instructions__),Message(role="system", content=self.__summarize_prompt_template__)])
-        self.__conversation__ = [self.__build_prompt__(), Message(role="system", content=f"Summary of previous conversation: {summary_response}")]
+        self.__conversation__.clear()
+        self.__conversation__.extend([self.__build_prompt__(), Message(role="system", content=f"Summary of previous conversation: {summary_response}")])
 
     def __save_thought__(self, reasoning: str) -> None:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
